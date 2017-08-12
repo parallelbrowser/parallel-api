@@ -69,6 +69,17 @@ exports.open = async function (userArchive) {
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
+    },
+
+    subscripts: {
+      primaryKey: 'createdAt',
+      index: ['createdAt', '_origin+createdAt'],
+      validator: record => ({
+        subscriptOrigin: coerce.string(record.subscriptOrigin),
+        subscriptOriginURL: coerce.string(record.subscriptOriginURL),
+        createdAt: coerce.number(record.createdAt, {required: true}),
+        receivedAt: Date.now()
+      })
     }
 
     // TCW -- END
@@ -427,67 +438,22 @@ exports.open = async function (userArchive) {
 
     // TCW -- subscripts api
 
-    getSubscript (archive) {
-      var archiveUrl = coerce.archiveUrl(archive)
-      return db.profile.get(archiveUrl)
-    },
+    subscript (archive, {
+      subscriptOrigin,
+      subscriptOriginURL,
+      subscriptID
+    }) {
+      subscriptOrigin = coerce.string(subscriptOrigin)
+      subscriptOriginURL = coerce.string(subscriptOriginURL)
+      subscriptID = coerce.string(subscriptID)
+      const createdAt = Date.now()
 
-    setSubscript (archive, profile) {
-      var archiveUrl = coerce.archiveUrl(archive)
-      return db.profile.upsert(archiveUrl, profile)
-    },
-
-    async subscribe (archive, target, name) {
-      // update the follow record
-      var archiveUrl = coerce.archiveUrl(archive)
-      var targetUrl = coerce.archiveUrl(target)
-      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
-        record.subscriptions = record.subscriptions || []
-        if (!record.subscriptions.find(s => s.url === targetUrl)) {
-          record.subscriptions.push({url: targetUrl, name})
-        }
-        return record
+      return db.subscripts.add(archive, {
+        subscriptOrigin,
+        subscriptOriginURL,
+        subscriptID,
+        createdAt
       })
-      if (changes === 0) {
-        throw new Error('Failed to follow: no profile record exists. Run setProfile() before follow().')
-      }
-      // index the target
-      await db.addArchive(target)
-    },
-
-    async unsubscribe (archive, target) {
-      // update the follow record
-      var archiveUrl = coerce.archiveUrl(archive)
-      var targetUrl = coerce.archiveUrl(target)
-      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
-        record.subscriptions = record.subscriptions || []
-        record.subscriptions = record.subscriptions.filter(s => s.url !== targetUrl)
-        return record
-      })
-      if (changes === 0) {
-        throw new Error('Failed to unsubscribe: no profile record exists. Run setProfile() before unfollow().')
-      }
-      // unindex the target
-      await db.removeArchive(target)
-    },
-
-    getSubscribersQuery (archive) {
-      var archiveUrl = coerce.archiveUrl(archive)
-      return db.profile.where('subscriptUrls').equals(archiveUrl)
-    },
-
-    listSubscripts (archive) {
-      return this.getSubscriptsQuery(archive).toArray()
-    },
-
-    countSubscripts (archive) {
-      return this.getSubscriptsQuery(archive).count()
-    },
-
-    async isSubscribed (archiveA, archiveB) {
-      var archiveBUrl = coerce.archiveUrl(archiveB)
-      var profileA = await db.profile.get(archiveA)
-      return profileA.subscriptUrls.indexOf(archiveBUrl) !== -1
     }
   }
 }
