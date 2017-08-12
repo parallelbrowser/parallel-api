@@ -1,6 +1,12 @@
 const InjestDB = require('injestdb')
 const coerce = require('./lib/coerce')
 
+// TCW -- import crypto
+
+const crypto = require('crypto')
+
+// TCW END
+
 // exported api
 // =
 
@@ -17,7 +23,15 @@ exports.open = async function (userArchive) {
         bio: coerce.string(record.bio),
         avatar: coerce.path(record.avatar),
         follows: coerce.arrayOfFollows(record.follows),
-        followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url)
+        followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url),
+
+        // TCW -- add fields to profile for subscribed scripts
+
+        subscripts: coerce.arrayOfSubscripts(record.subscripts),
+        subscriptUrls: coerce.arrayOfSubscripts(record.subscripts).map(s => s.url)
+
+        // TCW -- END
+
       })
     },
     broadcasts: {
@@ -39,7 +53,26 @@ exports.open = async function (userArchive) {
         vote: coerce.vote(record.vote),
         createdAt: coerce.number(record.createdAt, {required: true})
       })
+    },
+
+    // TCW -- added prescript schema
+
+    prescripts: {
+      primaryKey: 'createdAt',
+      index: ['createdAt', '_origin+createdAt'],
+      validator: record => ({
+        prescriptID: coerce.string(record.prescriptID),
+        prescriptName: coerce.string(record.prescriptName),
+        prescriptInfo: coerce.string(record.prescriptInfo),
+        prescriptJS: coerce.string(record.prescriptJS),
+        prescriptCSS: coerce.string(record.prescriptCSS),
+        createdAt: coerce.number(record.createdAt, {required: true}),
+        receivedAt: Date.now()
+      })
     }
+
+    // TCW -- END
+
   })
   await db.open()
 
@@ -305,6 +338,156 @@ exports.open = async function (userArchive) {
         }
       })
       return res
+    },
+
+    // TCW -- prescript api
+
+    prescript (archive, {
+      prescriptName,
+      prescriptInfo,
+      prescriptJS,
+      prescriptCSS
+    }) {
+      const prescriptID = crypto.randomBytes(20).toString('hex')
+      prescriptName = coerce.string(prescriptName)
+      prescriptInfo = coerce.string(prescriptInfo)
+      prescriptJS = coerce.string(prescriptJS)
+      prescriptCSS = coerce.string(prescriptCSS)
+      const createdAt = Date.now()
+
+      return db.prescripts.add(archive, {
+        prescriptID,
+        prescriptName,
+        prescriptInfo,
+        prescriptJS,
+        prescriptCSS,
+        createdAt
+      })
+    },
+
+    getPrescriptsQuery ({author, after, before, offset, limit, reverse} = {}) {
+      var query = db.prescripts
+      if (author) {
+        author = coerce.archiveUrl(author)
+        after = after || 0
+        before = before || Infinity
+        query = query.where('_origin+createdAt').between([author, after], [author, before])
+      } else if (after || before) {
+        after = after || 0
+        before = before || Infinity
+        query = query.where('createdAt').between(after, before)
+      } else {
+        query = query.orderBy('createdAt')
+      }
+      if (offset) query = query.offset(offset)
+      if (limit) query = query.limit(limit)
+      if (reverse) query = query.reverse()
+      return query
+    },
+
+    async listPrescripts (opts = {}, query) {
+      var promises = []
+      query = query || this.getPrescriptsQuery(opts)
+      var prescripts = await query.toArray()
+
+      // fetch author profile
+      if (opts.fetchAuthor) {
+        let profiles = {}
+        promises = promises.concat(prescripts.map(async b => {
+          if (!profiles[b._origin]) {
+            profiles[b._origin] = this.getProfile(b._origin)
+          }
+          b.author = await profiles[b._origin]
+        }))
+      }
+
+      // tabulate votes
+      if (opts.countVotes) {
+        promises = promises.concat(prescripts.map(async b => {
+          b.votes = await this.countVotes(b._url)
+        }))
+      }
+
+      await Promise.all(promises)
+      return prescripts
+    },
+
+    countPrescripts (opts, query) {
+      query = query || this.getPrescriptsQuery(opts)
+      return query.count()
+    },
+
+    async getPrescript (record) {
+      const recordUrl = coerce.recordUrl(record)
+      record = await db.prescripts.get(recordUrl)
+      record.author = await this.getProfile(record._origin)
+      record.votes = await this.countVotes(recordUrl)
+      return record
+    },
+
+    // TCW -- subscripts api
+
+    getSubscript (archive) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      return db.profile.get(archiveUrl)
+    },
+
+    setSubscript (archive, profile) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      return db.profile.upsert(archiveUrl, profile)
+    },
+
+    async subscribe (archive, target, name) {
+      // update the follow record
+      var archiveUrl = coerce.archiveUrl(archive)
+      var targetUrl = coerce.archiveUrl(target)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.subscriptions = record.subscriptions || []
+        if (!record.subscriptions.find(s => s.url === targetUrl)) {
+          record.subscriptions.push({url: targetUrl, name})
+        }
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to follow: no profile record exists. Run setProfile() before follow().')
+      }
+      // index the target
+      await db.addArchive(target)
+    },
+
+    async unsubscribe (archive, target) {
+      // update the follow record
+      var archiveUrl = coerce.archiveUrl(archive)
+      var targetUrl = coerce.archiveUrl(target)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.subscriptions = record.subscriptions || []
+        record.subscriptions = record.subscriptions.filter(s => s.url !== targetUrl)
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to unsubscribe: no profile record exists. Run setProfile() before unfollow().')
+      }
+      // unindex the target
+      await db.removeArchive(target)
+    },
+
+    getSubscribersQuery (archive) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      return db.profile.where('subscriptUrls').equals(archiveUrl)
+    },
+
+    listSubscripts (archive) {
+      return this.getSubscriptsQuery(archive).toArray()
+    },
+
+    countSubscripts (archive) {
+      return this.getSubscriptsQuery(archive).count()
+    },
+
+    async isSubscribed (archiveA, archiveB) {
+      var archiveBUrl = coerce.archiveUrl(archiveB)
+      var profileA = await db.profile.get(archiveA)
+      return profileA.subscriptUrls.indexOf(archiveBUrl) !== -1
     }
   }
 }
