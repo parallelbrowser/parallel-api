@@ -421,13 +421,6 @@ exports.open = async function (userArchive) {
       subscriptJS,
       subscriptCSS
     ) {
-      console.log('archive', archive)
-      console.log('target', target)
-      console.log('subscriptOrigin', subscriptOrigin)
-      console.log('subscriptName', subscriptName)
-      console.log('subscriptInfo', subscriptInfo)
-      console.log('subscriptJS', subscriptJS)
-      console.log('subscriptCSS', subscriptCSS)
       // update the follow record
       var archiveUrl = coerce.archiveUrl(archive)
       var subscriptURL = coerce.archiveUrl(target)
@@ -443,7 +436,6 @@ exports.open = async function (userArchive) {
             subscriptCSS
           })
         }
-        console.log('subscripts in record1', record.subscripts)
         return record
       })
       if (changes === 0) {
