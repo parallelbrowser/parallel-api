@@ -1,12 +1,6 @@
 const InjestDB = require('injestdb')
 const coerce = require('./lib/coerce')
 
-// TCW -- import crypto
-
-const crypto = require('crypto')
-
-// TCW END
-
 // exported api
 // =
 
@@ -23,15 +17,7 @@ exports.open = async function (userArchive) {
         bio: coerce.string(record.bio),
         avatar: coerce.path(record.avatar),
         follows: coerce.arrayOfFollows(record.follows),
-        followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url),
-
-        // TCW -- add fields to profile for subscribed scripts
-
-        subscripts: coerce.arrayOfSubscripts(record.subscripts),
-        subscriptUrls: coerce.arrayOfSubscripts(record.subscripts).map(s => s.url)
-
-        // TCW -- END
-
+        followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url)
       })
     },
     broadcasts: {
@@ -61,7 +47,6 @@ exports.open = async function (userArchive) {
       primaryKey: 'createdAt',
       index: ['createdAt', '_origin+createdAt'],
       validator: record => ({
-        prescriptID: coerce.string(record.prescriptID),
         prescriptName: coerce.string(record.prescriptName),
         prescriptInfo: coerce.string(record.prescriptInfo),
         prescriptJS: coerce.string(record.prescriptJS),
@@ -73,10 +58,10 @@ exports.open = async function (userArchive) {
 
     subscripts: {
       primaryKey: 'createdAt',
-      index: ['createdAt', '_origin+createdAt'],
+      index: ['createdAt', '_origin+createdAt', 'subscriptURL', 'subscriptOrigin'],
       validator: record => ({
         subscriptOrigin: coerce.string(record.subscriptOrigin),
-        subscriptOriginURL: coerce.string(record.subscriptOriginURL),
+        subscriptURL: coerce.string(record.subscriptURL),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
@@ -359,7 +344,6 @@ exports.open = async function (userArchive) {
       prescriptJS,
       prescriptCSS
     }) {
-      const prescriptID = crypto.randomBytes(20).toString('hex')
       prescriptName = coerce.string(prescriptName)
       prescriptInfo = coerce.string(prescriptInfo)
       prescriptJS = coerce.string(prescriptJS)
@@ -367,7 +351,6 @@ exports.open = async function (userArchive) {
       const createdAt = Date.now()
 
       return db.prescripts.add(archive, {
-        prescriptID,
         prescriptName,
         prescriptInfo,
         prescriptJS,
@@ -438,22 +421,75 @@ exports.open = async function (userArchive) {
 
     // TCW -- subscripts api
 
-    subscript (archive, {
-      subscriptOrigin,
-      subscriptOriginURL,
-      subscriptID
-    }) {
+    subscript (archive, {subscriptOrigin, subscriptURL}) {
       subscriptOrigin = coerce.string(subscriptOrigin)
-      subscriptOriginURL = coerce.string(subscriptOriginURL)
-      subscriptID = coerce.string(subscriptID)
+      subscriptURL = coerce.string(subscriptURL)
       const createdAt = Date.now()
 
       return db.subscripts.add(archive, {
         subscriptOrigin,
-        subscriptOriginURL,
-        subscriptID,
+        subscriptURL,
         createdAt
       })
+    },
+
+    getSubscriptsQuery ({author, after, before, offset, limit, reverse} = {}) {
+      var query = db.subscripts
+      if (author) {
+        author = coerce.archiveUrl(author)
+        after = after || 0
+        before = before || Infinity
+        query = query.where('_origin+createdAt').between([author, after], [author, before])
+      } else if (after || before) {
+        after = after || 0
+        before = before || Infinity
+        query = query.where('createdAt').between(after, before)
+      } else {
+        query = query.orderBy('createdAt')
+      }
+      if (offset) query = query.offset(offset)
+      if (limit) query = query.limit(limit)
+      if (reverse) query = query.reverse()
+      return query
+    },
+
+    async listSubscripts (opts = {}, query) {
+      var promises = []
+      query = query || this.getSubscriptsQuery(opts)
+      var subscripts = await query.toArray()
+
+      // fetch author profile
+      if (opts.fetchAuthor) {
+        let profiles = {}
+        promises = promises.concat(subscripts.map(async b => {
+          if (!profiles[b._origin]) {
+            profiles[b._origin] = this.getProfile(b._origin)
+          }
+          b.author = await profiles[b._origin]
+        }))
+      }
+
+      // tabulate votes
+      if (opts.countVotes) {
+        promises = promises.concat(subscripts.map(async b => {
+          b.votes = await this.countVotes(b._url)
+        }))
+      }
+
+      await Promise.all(promises)
+      return subscripts
+    },
+
+    async removeSubscript (prescriptURL) {
+      console.log('prescript url in api', prescriptURL)
+      console.log('db subscripts1', db.subscripts)
+      const dood = await db.subscripts.where('subscriptURL').equals(prescriptURL)
+      // const dood = await db.subscripts.where({subscriptURL: prescriptURL})
+      const ok = await this.listSubscripts()
+      console.log('dood', dood)
+      console.log('ok', ok)
+      const num = await dood.delete()
+      console.log(num)
     }
   }
 }
