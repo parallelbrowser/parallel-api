@@ -19,7 +19,7 @@ exports.open = async function (userArchive) {
         follows: coerce.arrayOfFollows(record.follows),
         followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url),
         subscripts: coerce.arrayOfSubscripts(record.subscripts),
-        subscriptURLs: coerce.arrayOfSubscripts(record.subscripts).map(s => s.url)
+        subscriptURLs: coerce.arrayOfSubscripts(record.subscripts).map(s => s.subscriptURL)
       })
     },
     broadcasts: {
@@ -402,6 +402,7 @@ exports.open = async function (userArchive) {
     },
 
     async getPrescript (record) {
+      console.log('record', record)
       const recordUrl = coerce.recordUrl(record)
       record = await db.prescripts.get(recordUrl)
       record.author = await this.getProfile(record._origin)
@@ -410,20 +411,45 @@ exports.open = async function (userArchive) {
     },
 
     // TCW -- subscripts api
-    async subscribe (archive, target, name) {
+
+    async subscribe (
+      archive,
+      target,
+      subscriptOrigin,
+      subscriptName,
+      subscriptInfo,
+      subscriptJS,
+      subscriptCSS
+    ) {
+      console.log('archive', archive)
+      console.log('target', target)
+      console.log('subscriptOrigin', subscriptOrigin)
+      console.log('subscriptName', subscriptName)
+      console.log('subscriptInfo', subscriptInfo)
+      console.log('subscriptJS', subscriptJS)
+      console.log('subscriptCSS', subscriptCSS)
       // update the follow record
       var archiveUrl = coerce.archiveUrl(archive)
-      var targetUrl = coerce.archiveUrl(target)
+      var subscriptURL = coerce.archiveUrl(target)
       var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
         record.subscripts = record.subscripts || []
-        if (!record.subscripts.find(s => s.url === targetUrl)) {
-          record.subscripts.push({url: targetUrl})
+        if (!record.subscripts.find(s => s.subscriptURL === subscriptURL)) {
+          record.subscripts.push({
+            subscriptURL,
+            subscriptOrigin,
+            subscriptName,
+            subscriptInfo,
+            subscriptJS,
+            subscriptCSS
+          })
         }
+        console.log('subscripts in record1', record.subscripts)
         return record
       })
       if (changes === 0) {
         throw new Error('Failed to follow: no profile record exists. Run setProfile() before follow().')
       }
+
       // index the target
       await db.addArchive(target)
     },
@@ -434,7 +460,7 @@ exports.open = async function (userArchive) {
       var targetUrl = coerce.archiveUrl(target)
       var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
         record.subscripts = record.subscripts || []
-        record.subscripts = record.subscripts.filter(f => f.url !== targetUrl)
+        record.subscripts = record.subscripts.filter(s => s.subscriptURL !== targetUrl)
         return record
       })
       if (changes === 0) {
