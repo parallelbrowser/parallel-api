@@ -17,7 +17,9 @@ exports.open = async function (userArchive) {
         bio: coerce.string(record.bio),
         avatar: coerce.path(record.avatar),
         follows: coerce.arrayOfFollows(record.follows),
-        followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url)
+        followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url),
+        subscripts: coerce.arrayOfSubscripts(record.subscripts),
+        subscriptURLs: coerce.arrayOfSubscripts(record.subscripts).map(s => s.subscriptURL)
       })
     },
     broadcasts: {
@@ -39,7 +41,24 @@ exports.open = async function (userArchive) {
         vote: coerce.vote(record.vote),
         createdAt: coerce.number(record.createdAt, {required: true})
       })
+    },
+
+    // TCW -- added prescript schema
+
+    prescripts: {
+      primaryKey: 'createdAt',
+      index: ['createdAt', '_origin+createdAt'],
+      validator: record => ({
+        prescriptName: coerce.string(record.prescriptName),
+        prescriptInfo: coerce.string(record.prescriptInfo),
+        prescriptJS: coerce.string(record.prescriptJS),
+        prescriptCSS: coerce.string(record.prescriptCSS),
+        createdAt: coerce.number(record.createdAt, {required: true}),
+        receivedAt: Date.now()
+      })
     }
+    // TCW -- END
+
   })
   await db.open()
 
@@ -305,6 +324,142 @@ exports.open = async function (userArchive) {
         }
       })
       return res
+    },
+
+    // TCW -- prescript api
+
+    prescript (archive, {
+      prescriptName,
+      prescriptInfo,
+      prescriptJS,
+      prescriptCSS
+    }) {
+      prescriptName = coerce.string(prescriptName)
+      prescriptInfo = coerce.string(prescriptInfo)
+      prescriptJS = coerce.string(prescriptJS)
+      prescriptCSS = coerce.string(prescriptCSS)
+      const createdAt = Date.now()
+
+      return db.prescripts.add(archive, {
+        prescriptName,
+        prescriptInfo,
+        prescriptJS,
+        prescriptCSS,
+        createdAt
+      })
+    },
+
+    getPrescriptsQuery ({author, after, before, offset, limit, reverse} = {}) {
+      var query = db.prescripts
+      if (author) {
+        author = coerce.archiveUrl(author)
+        after = after || 0
+        before = before || Infinity
+        query = query.where('_origin+createdAt').between([author, after], [author, before])
+      } else if (after || before) {
+        after = after || 0
+        before = before || Infinity
+        query = query.where('createdAt').between(after, before)
+      } else {
+        query = query.orderBy('createdAt')
+      }
+      if (offset) query = query.offset(offset)
+      if (limit) query = query.limit(limit)
+      if (reverse) query = query.reverse()
+      return query
+    },
+
+    async listPrescripts (opts = {}, query) {
+      var promises = []
+      query = query || this.getPrescriptsQuery(opts)
+      var prescripts = await query.toArray()
+
+      // fetch author profile
+      if (opts.fetchAuthor) {
+        let profiles = {}
+        promises = promises.concat(prescripts.map(async b => {
+          if (!profiles[b._origin]) {
+            profiles[b._origin] = this.getProfile(b._origin)
+          }
+          b.author = await profiles[b._origin]
+        }))
+      }
+
+      // tabulate votes
+      if (opts.countVotes) {
+        promises = promises.concat(prescripts.map(async b => {
+          b.votes = await this.countVotes(b._url)
+        }))
+      }
+
+      await Promise.all(promises)
+      return prescripts
+    },
+
+    countPrescripts (opts, query) {
+      query = query || this.getPrescriptsQuery(opts)
+      return query.count()
+    },
+
+    async getPrescript (record) {
+      console.log('record', record)
+      const recordUrl = coerce.recordUrl(record)
+      record = await db.prescripts.get(recordUrl)
+      record.author = await this.getProfile(record._origin)
+      record.votes = await this.countVotes(recordUrl)
+      return record
+    },
+
+    // TCW -- subscripts api
+
+    async subscribe (
+      archive,
+      target,
+      subscriptOrigin,
+      subscriptName,
+      subscriptInfo,
+      subscriptJS,
+      subscriptCSS
+    ) {
+      // update the follow record
+      var archiveUrl = coerce.archiveUrl(archive)
+      var subscriptURL = coerce.archiveUrl(target)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.subscripts = record.subscripts || []
+        if (!record.subscripts.find(s => s.subscriptURL === subscriptURL)) {
+          record.subscripts.push({
+            subscriptURL,
+            subscriptOrigin,
+            subscriptName,
+            subscriptInfo,
+            subscriptJS,
+            subscriptCSS
+          })
+        }
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to follow: no profile record exists. Run setProfile() before follow().')
+      }
+
+      // index the target
+      await db.addArchive(target)
+    },
+
+    async unsubscribe (archive, target) {
+      // update the follow record
+      var archiveUrl = coerce.archiveUrl(archive)
+      var targetUrl = coerce.archiveUrl(target)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.subscripts = record.subscripts || []
+        record.subscripts = record.subscripts.filter(s => s.subscriptURL !== targetUrl)
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to unfollow: no profile record exists. Run setProfile() before unfollow().')
+      }
+      // unindex the target
+      await db.removeArchive(target)
     }
   }
 }

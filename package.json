@@ -1,7 +1,7 @@
 {
-  "name": "dat-nexus-api",
-  "version": "4.0.0",
-  "description": "API for interacting with Dat Nexus profiles.",
+  "name": "parallel-scratch-api",
+  "version": "0.2.8",
+  "description": "Scratch API for Parallel.",
   "main": "index.js",
   "dependencies": {
     "injestdb": "^1.1.0"
@@ -16,17 +16,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/beakerbrowser/dat-nexus-api.git"
+    "url": "git+https://github.com/parallelbrowser/dat-scratch-api.git"
   },
   "keywords": [
     "dat",
     "profile",
     "site"
   ],
-  "author": "Paul Frazee <pfrazee@gmail.com>",
+  "author": "Tom Willkens <tom.willkens@protonmail.com",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/beakerbrowser/dat-nexus-api/issues"
+    "url": "https://github.com/parallelbrowser/dat-scratch-api/issues"
   },
-  "homepage": "https://github.com/beakerbrowser/dat-nexus-api#readme"
+  "homepage": "https://github.com/parallelbrowser/dat-scratch-api#readme"
 }
