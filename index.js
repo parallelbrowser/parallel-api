@@ -58,12 +58,14 @@ exports.open = async function (userArchive) {
       })
     },
 
+    // added postscript schema
+
     postscripts: {
       primaryKey: 'createdAt',
       index: ['createdAt', '_origin+createdAt'],
       validator: record => ({
         postscriptJS: coerce.string(record.postscriptJS),
-        postscriptCSS: coerce.string(record.postscriptCSS),
+        postscriptHTTP: coerce.string(record.postscriptHTTP),
         subscriptURL: coerce.string(record.subscriptURL),
         subscriptOrigin: coerce.string(record.subscriptOrigin),
         subscriptName: coerce.string(record.subscriptName),
@@ -73,7 +75,6 @@ exports.open = async function (userArchive) {
       })
     }
     // TCW -- END
-
   })
   await db.open()
 
