@@ -439,7 +439,7 @@ exports.open = async function (userArchive) {
         return record
       })
       if (changes === 0) {
-        throw new Error('Failed to follow: no profile record exists. Run setProfile() before follow().')
+        throw new Error('Failed to subscribe: no profile record exists. Run setProfile() before subscribe().')
       }
 
       // index the target
@@ -456,7 +456,7 @@ exports.open = async function (userArchive) {
         return record
       })
       if (changes === 0) {
-        throw new Error('Failed to unfollow: no profile record exists. Run setProfile() before unfollow().')
+        throw new Error('Failed to unsubscribe: no profile record exists. Run setProfile() before unsubscribe().')
       }
       // unindex the target
       await db.removeArchive(target)
