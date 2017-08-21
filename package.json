@@ -1,10 +1,10 @@
 {
   "name": "parallel-scratch-api",
-  "version": "0.2.8",
+  "version": "0.4.4",
   "description": "Scratch API for Parallel.",
   "main": "index.js",
   "dependencies": {
-    "injestdb": "^1.1.0"
+    "scratch-db-test": "^0.0.8"
   },
   "devDependencies": {
     "ava": "^0.21.0",
