@@ -46,7 +46,7 @@ exports.open = async function (userArchive) {
 
     gizmos: {
       primaryKey: 'createdAt',
-      index: ['createdAt', '_origin+createdAt'],
+      index: ['createdAt', '_origin+createdAt', '_origin+gizmoOriginURL'],
       validator: record => ({
         gizmoOriginURL: coerce.string(record.gizmoOriginURL),
         gizmoOriginArchive: coerce.string(record.gizmoOriginArchive),
@@ -420,18 +420,18 @@ exports.open = async function (userArchive) {
     },
 
     async isSubscribed (archive, gizmo) {
-      console.log('gizmo in isSubscribed api', gizmo)
       var gizmoURL = coerce.recordUrl(gizmo.gizmoOriginURL)
       var profile = await db.profile.get(archive)
-      console.log('profile gizmos', profile.gizmoURLs)
       return profile.gizmoURLs.indexOf(gizmoURL) !== -1
     },
 
-    async removeGizmo (gizmo) {
-      var changes = await db.gizmos.where('gizmoOriginURL').equals(gizmo.gizmoOriginURL).delete()
+    async removeGizmo (archive, gizmo) {
+      console.log('gizmo in remove', gizmo)
+      const changes = await db.gizmos.where('_origin+gizmoOriginURL').equals([archive, gizmo.gizmoOriginURL]).delete()
       if (changes === 0) {
         throw new Error('Failed to delete: no gizmo record exists.')
       }
+      await db.removeArchive(gizmo._url)
     },
 
     getGizmosQuery ({author, after, before, offset, limit, reverse} = {}) {
