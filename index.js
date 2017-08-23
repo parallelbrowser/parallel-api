@@ -6,7 +6,7 @@ const coerce = require('./lib/coerce')
 
 exports.open = async function (userArchive) {
   // setup the archive
-  var db = new InjestDB('nexus:' + (userArchive ? userArchive.url : 'cache'))
+  var db = new InjestDB('parallel:' + (userArchive ? userArchive.url : 'cache'))
   db.schema({
     version: 1,
     profile: {
@@ -18,8 +18,7 @@ exports.open = async function (userArchive) {
         avatar: coerce.path(record.avatar),
         follows: coerce.arrayOfFollows(record.follows),
         followUrls: coerce.arrayOfFollows(record.follows).map(f => f.url),
-        subscripts: coerce.arrayOfSubscripts(record.subscripts),
-        subscriptURLs: coerce.arrayOfSubscripts(record.subscripts).map(s => s.subscriptURL)
+        gizmoURLs: coerce.arrayOfGizmoURLs(record.gizmoURLs)
       })
     },
     broadcasts: {
@@ -45,20 +44,21 @@ exports.open = async function (userArchive) {
 
     // TCW -- added prescript schema
 
-    prescripts: {
+    gizmos: {
       primaryKey: 'createdAt',
       index: ['createdAt', '_origin+createdAt'],
       validator: record => ({
-        prescriptName: coerce.string(record.prescriptName),
-        prescriptInfo: coerce.string(record.prescriptInfo),
-        prescriptJS: coerce.string(record.prescriptJS),
-        prescriptCSS: coerce.string(record.prescriptCSS),
+        gizmoOriginURL: coerce.string(record.gizmoOriginURL),
+        gizmoOriginArchive: coerce.string(record.gizmoOriginArchive),
+        gizmoOriginAuthor: coerce.string(record.gizmoOriginAuthor),
+        gizmoName: coerce.string(record.gizmoName),
+        gizmoDescription: coerce.string(record.gizmoDescription),
+        gizmoDocs: coerce.string(record.gizmoDocs),
+        gizmoJS: coerce.string(record.gizmoJS),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
     },
-
-    // added postscript schema
 
     postscripts: {
       primaryKey: 'createdAt',
@@ -66,10 +66,12 @@ exports.open = async function (userArchive) {
       validator: record => ({
         postscriptJS: coerce.string(record.postscriptJS),
         postscriptHTTP: coerce.string(record.postscriptHTTP),
-        subscriptURL: coerce.string(record.subscriptURL),
-        subscriptOrigin: coerce.string(record.subscriptOrigin),
-        subscriptName: coerce.string(record.subscriptName),
-        subscriptInfo: coerce.string(record.subscriptInfo),
+        postscriptInfo: coerce.string(record.postscriptInfo),
+        gizmoOriginArchive: coerce.string(record.gizmoOriginArchive),
+        gizmoOriginURL: coerce.string(record.gizmoOriginURL),
+        gizmoOriginAuthor: coerce.string(record.gizmoOriginAuthor),
+        gizmoName: coerce.string(record.gizmoName),
+        gizmoDescription: coerce.string(record.gizmoDescription),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
@@ -342,31 +344,98 @@ exports.open = async function (userArchive) {
       return res
     },
 
-    // TCW -- prescript api
+    // TCW -- gizmo api
 
-    prescript (archive, {
-      prescriptName,
-      prescriptInfo,
-      prescriptJS,
-      prescriptCSS
+    async gizmo (archive, {
+      gizmoOriginURL,
+      gizmoOriginArchive,
+      gizmoOriginAuthor,
+      gizmoName,
+      gizmoDescription,
+      gizmoDocs,
+      gizmoJS
     }) {
-      prescriptName = coerce.string(prescriptName)
-      prescriptInfo = coerce.string(prescriptInfo)
-      prescriptJS = coerce.string(prescriptJS)
-      prescriptCSS = coerce.string(prescriptCSS)
+      gizmoOriginURL = coerce.string(gizmoOriginURL)
+      gizmoOriginArchive = coerce.string(gizmoOriginArchive)
+      gizmoOriginAuthor = coerce.string(gizmoOriginAuthor)
+      gizmoName = coerce.string(gizmoName)
+      gizmoDescription = coerce.string(gizmoDescription)
+      gizmoDocs = coerce.string(gizmoDocs)
+      gizmoJS = coerce.string(gizmoJS)
       const createdAt = Date.now()
-
-      return db.prescripts.add(archive, {
-        prescriptName,
-        prescriptInfo,
-        prescriptJS,
-        prescriptCSS,
-        createdAt
-      })
+      if (gizmoOriginURL) {
+        return db.gizmos.add(archive, {
+          gizmoOriginURL,
+          gizmoOriginArchive,
+          gizmoOriginAuthor,
+          gizmoName,
+          gizmoDescription,
+          gizmoDocs,
+          gizmoJS,
+          createdAt
+        })
+      } else {
+        gizmoOriginURL = await db.gizmos.add(archive, {
+          gizmoOriginURL,
+          gizmoOriginArchive,
+          gizmoOriginAuthor,
+          gizmoName,
+          gizmoDescription,
+          gizmoDocs,
+          gizmoJS,
+          createdAt
+        })
+        this.updateGizmoOrigin(gizmoOriginURL)
+      }
     },
 
-    getPrescriptsQuery ({author, after, before, offset, limit, reverse} = {}) {
-      var query = db.prescripts
+    async updateGizmoOrigin (gizmoOriginURL) {
+      await db.gizmos.update(gizmoOriginURL, {gizmoOriginURL})
+    },
+
+    async subscribeToGizmo (archive, gizmo) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.gizmoURLs = record.gizmoURLs || []
+        if (!record.gizmoURLs.find(g => g.gizmoOriginURL === gizmo.gizmoOriginURL)) {
+          record.gizmoURLs.push(gizmo.gizmoOriginURL)
+        }
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to subscribe: no profile record exists. Run setProfile() before subscribeToGizmo().')
+      }
+    },
+
+    async unsubscribeFromGizmo (archive, gizmo) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.gizmoURLs = record.gizmoURLs || []
+        record.gizmoURLs = record.gizmoURLs.filter(g => g !== gizmo.gizmoOriginURL)
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to unsubscribe: no profile record exists. Run setProfile() before unsubscribeFromGizmo().')
+      }
+    },
+
+    async isSubscribed (archive, gizmo) {
+      console.log('gizmo in isSubscribed api', gizmo)
+      var gizmoURL = coerce.recordUrl(gizmo.gizmoOriginURL)
+      var profile = await db.profile.get(archive)
+      console.log('profile gizmos', profile.gizmoURLs)
+      return profile.gizmoURLs.indexOf(gizmoURL) !== -1
+    },
+
+    async removeGizmo (gizmo) {
+      var changes = await db.gizmos.where('gizmoOriginURL').equals(gizmo.gizmoOriginURL).delete()
+      if (changes === 0) {
+        throw new Error('Failed to delete: no gizmo record exists.')
+      }
+    },
+
+    getGizmosQuery ({author, after, before, offset, limit, reverse} = {}) {
+      var query = db.gizmos
       if (author) {
         author = coerce.archiveUrl(author)
         after = after || 0
@@ -385,15 +454,15 @@ exports.open = async function (userArchive) {
       return query
     },
 
-    async listPrescripts (opts = {}, query) {
+    async listGizmos (opts = {}, query) {
       var promises = []
-      query = query || this.getPrescriptsQuery(opts)
-      var prescripts = await query.toArray()
+      query = query || this.getGizmosQuery(opts)
+      var gizmos = await query.toArray()
 
       // fetch author profile
       if (opts.fetchAuthor) {
         let profiles = {}
-        promises = promises.concat(prescripts.map(async b => {
+        promises = promises.concat(gizmos.map(async b => {
           if (!profiles[b._origin]) {
             profiles[b._origin] = this.getProfile(b._origin)
           }
@@ -403,79 +472,26 @@ exports.open = async function (userArchive) {
 
       // tabulate votes
       if (opts.countVotes) {
-        promises = promises.concat(prescripts.map(async b => {
+        promises = promises.concat(gizmos.map(async b => {
           b.votes = await this.countVotes(b._url)
         }))
       }
 
       await Promise.all(promises)
-      return prescripts
+      return gizmos
     },
 
-    countPrescripts (opts, query) {
-      query = query || this.getPrescriptsQuery(opts)
+    countGizmos (opts, query) {
+      query = query || this.getGizmosQuery(opts)
       return query.count()
     },
 
-    async getPrescript (record) {
-      console.log('record', record)
+    async getGizmo (record) {
       const recordUrl = coerce.recordUrl(record)
-      record = await db.prescripts.get(recordUrl)
+      record = await db.gizmos.get(recordUrl)
       record.author = await this.getProfile(record._origin)
       record.votes = await this.countVotes(recordUrl)
       return record
-    },
-
-    // TCW -- subscripts api
-
-    async subscribe (
-      archive,
-      target,
-      subscriptOrigin,
-      subscriptName,
-      subscriptInfo,
-      subscriptJS,
-      subscriptCSS
-    ) {
-      // update the follow record
-      var archiveUrl = coerce.archiveUrl(archive)
-      var subscriptURL = coerce.archiveUrl(target)
-      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
-        record.subscripts = record.subscripts || []
-        if (!record.subscripts.find(s => s.subscriptURL === subscriptURL)) {
-          record.subscripts.push({
-            subscriptURL,
-            subscriptOrigin,
-            subscriptName,
-            subscriptInfo,
-            subscriptJS,
-            subscriptCSS
-          })
-        }
-        return record
-      })
-      if (changes === 0) {
-        throw new Error('Failed to follow: no profile record exists. Run setProfile() before follow().')
-      }
-
-      // index the target
-      await db.addArchive(target)
-    },
-
-    async unsubscribe (archive, target) {
-      // update the follow record
-      var archiveUrl = coerce.archiveUrl(archive)
-      var targetUrl = coerce.archiveUrl(target)
-      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
-        record.subscripts = record.subscripts || []
-        record.subscripts = record.subscripts.filter(s => s.subscriptURL !== targetUrl)
-        return record
-      })
-      if (changes === 0) {
-        throw new Error('Failed to unfollow: no profile record exists. Run setProfile() before unfollow().')
-      }
-      // unindex the target
-      await db.removeArchive(target)
     },
 
     // TCW -- postscripts api
@@ -483,26 +499,32 @@ exports.open = async function (userArchive) {
     postscript (archive, {
       postscriptJS,
       postscriptHTTP,
-      subscriptURL,
-      subscriptOrigin,
-      subscriptName,
-      subscriptInfo
+      postscriptInfo,
+      gizmoOriginArchive,
+      gizmoOriginURL,
+      gizmoOriginAuthor,
+      gizmoName,
+      gizmoDescription
     }) {
       postscriptJS = coerce.string(postscriptJS)
       postscriptHTTP = coerce.string(postscriptHTTP)
-      subscriptURL = coerce.string(subscriptURL)
-      subscriptOrigin = coerce.string(subscriptOrigin)
-      subscriptName = coerce.string(subscriptName)
-      subscriptInfo = coerce.string(subscriptInfo)
+      postscriptInfo = coerce.string(postscriptInfo)
+      gizmoOriginArchive = coerce.string(gizmoOriginArchive)
+      gizmoOriginURL = coerce.string(gizmoOriginURL)
+      gizmoOriginAuthor = coerce.string(gizmoOriginAuthor)
+      gizmoName = coerce.string(gizmoName)
+      gizmoDescription = coerce.string(gizmoDescription)
       const createdAt = Date.now()
 
       return db.postscripts.add(archive, {
         postscriptJS,
         postscriptHTTP,
-        subscriptURL,
-        subscriptOrigin,
-        subscriptName,
-        subscriptInfo,
+        postscriptInfo,
+        gizmoOriginArchive,
+        gizmoOriginURL,
+        gizmoOriginAuthor,
+        gizmoName,
+        gizmoDescription,
         createdAt
       })
     },
@@ -560,7 +582,6 @@ exports.open = async function (userArchive) {
     },
 
     async getPostscript (record) {
-      console.log('record', record)
       const recordUrl = coerce.recordUrl(record)
       record = await db.postscripts.get(recordUrl)
       record.author = await this.getProfile(record._origin)
