@@ -42,8 +42,6 @@ exports.open = async function (userArchive) {
       })
     },
 
-    // TCW -- added prescript schema
-
     gizmos: {
       primaryKey: 'createdAt',
       index: ['createdAt', '_origin+createdAt', '_origin+gizmoOriginURL'],
@@ -76,7 +74,6 @@ exports.open = async function (userArchive) {
         receivedAt: Date.now()
       })
     }
-    // TCW -- END
   })
   await db.open()
 
@@ -403,7 +400,7 @@ exports.open = async function (userArchive) {
         return record
       })
       if (changes === 0) {
-        throw new Error('Failed to subscribe: no profile record exists. Run setProfile() before subscribeToGizmo().')
+        throw new Error('Failed to subscribe: no gizmo record exists.')
       }
     },
 
@@ -415,7 +412,7 @@ exports.open = async function (userArchive) {
         return record
       })
       if (changes === 0) {
-        throw new Error('Failed to unsubscribe: no profile record exists. Run setProfile() before unsubscribeFromGizmo().')
+        throw new Error('Failed to unsubscribe: no gizmo record exists.')
       }
     },
 
@@ -487,6 +484,7 @@ exports.open = async function (userArchive) {
     },
 
     async getGizmo (record) {
+      console.log('record in get gizmo', record)
       const recordUrl = coerce.recordUrl(record)
       record = await db.gizmos.get(recordUrl)
       record.author = await this.getProfile(record._origin)
