@@ -57,14 +57,13 @@ exports.open = async function (userArchive) {
       })
     },
 
-    postscripts: {
+    posts: {
       primaryKey: 'createdAt',
       index: ['createdAt', '_origin+createdAt'],
       validator: record => ({
-        postscriptJS: coerce.string(record.postscriptJS),
-        postscriptHTTP: coerce.string(record.postscriptHTTP),
-        postscriptInfo: coerce.string(record.postscriptInfo),
-        gizmoOrigin: coerce.string(record.gizmoOrigin),
+        postJS: coerce.string(record.postJS),
+        postHTTP: coerce.string(record.postHTTP),
+        postText: coerce.string(record.postText),
         gizmoURL: coerce.string(record.gizmoURL),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
@@ -433,12 +432,13 @@ exports.open = async function (userArchive) {
       return query.count()
     },
 
-    async getGizmo (archive, record) {
+    async getGizmo (requester, record) {
+      const requesterUrl = coerce.archiveUrl(requester)
       const recordUrl = coerce.recordUrl(record)
       record = await db.gizmos.get(recordUrl)
       record.author = await this.getProfile(record._origin)
       record.votes = await this.countVotes(recordUrl)
-      record.isSubscribed = await this.isSubscribed(archive, record)
+      record.isSubscribed = await this.isSubscribed(requesterUrl, record)
       return record
     },
 
@@ -480,34 +480,31 @@ exports.open = async function (userArchive) {
       return !!profile.subgizmos.find(sg => sg.url === gizmoURL)
     },
 
-    // TCW -- postscripts api
+    // TCW -- posts api
 
-    postscript (archive, {
-      postscriptJS,
-      postscriptHTTP,
-      postscriptInfo,
-      gizmoOrigin,
+    post (archive, {
+      postJS,
+      postHTTP,
+      postText,
       gizmoURL
     }) {
-      postscriptJS = coerce.string(postscriptJS)
-      postscriptHTTP = coerce.string(postscriptHTTP)
-      postscriptInfo = coerce.string(postscriptInfo)
-      gizmoOrigin = coerce.string(gizmoOrigin)
+      postJS = coerce.string(postJS)
+      postHTTP = coerce.string(postHTTP)
+      postText = coerce.string(postText)
       gizmoURL = coerce.string(gizmoURL)
       const createdAt = Date.now()
 
-      return db.postscripts.add(archive, {
-        postscriptJS,
-        postscriptHTTP,
-        postscriptInfo,
-        gizmoOrigin,
+      return db.posts.add(archive, {
+        postJS,
+        postHTTP,
+        postText,
         gizmoURL,
         createdAt
       })
     },
 
-    getPostscriptsQuery ({author, after, before, offset, limit, reverse} = {}) {
-      var query = db.postscripts
+    getPostsQuery ({author, after, before, offset, limit, reverse} = {}) {
+      var query = db.posts
       if (author) {
         author = coerce.archiveUrl(author)
         after = after || 0
@@ -526,44 +523,59 @@ exports.open = async function (userArchive) {
       return query
     },
 
-    async listPostscripts (opts = {}, query) {
+    async listPosts (opts = {}, query) {
       var promises = []
-      query = query || this.getPostscriptsQuery(opts)
-      var postscripts = await query.toArray()
+      query = query || this.getPostsQuery(opts)
+      var posts = await query.toArray()
+
+      if (opts.currentURL) {
+        posts = posts.filter(p => {
+          return p.postHTTP === opts.currentURL
+        })
+      }
 
       // fetch author profile
       if (opts.fetchAuthor) {
         let profiles = {}
-        promises = promises.concat(postscripts.map(async b => {
-          if (!profiles[b._origin]) {
-            profiles[b._origin] = await this.getProfile(b._origin)
+        promises = promises.concat(posts.map(async p => {
+          if (!profiles[p._origin]) {
+            profiles[p._origin] = await this.getProfile(p._origin)
           }
-          b.author = await profiles[b._origin]
+          p.author = await profiles[p._origin]
+        }))
+      }
+
+      if (opts.fetchGizmo) {
+        promises = promises.concat(posts.map(async p => {
+          p.gizmo = await this.getGizmo(opts.requester, p.gizmoURL)
         }))
       }
 
       // tabulate votes
       if (opts.countVotes) {
-        promises = promises.concat(postscripts.map(async b => {
-          b.votes = await this.countVotes(b._url)
+        promises = promises.concat(posts.map(async p => {
+          p.votes = await this.countVotes(p._url)
         }))
       }
 
       await Promise.all(promises)
-      return postscripts
+      return posts
     },
 
-    countPostscripts (opts, query) {
-      query = query || this.getPostscriptsQuery(opts)
+    countPosts (opts, query) {
+      query = query || this.getPostsQuery(opts)
       return query.count()
     },
 
-    async getPostscript (record) {
-      const recordUrl = coerce.recordUrl(record)
-      record = await db.postscripts.get(recordUrl)
-      record.author = await this.getProfile(record._origin)
-      record.votes = await this.countVotes(recordUrl)
-      return record
+    async getPost (requester, post) {
+      const requesterUrl = coerce.archiveUrl(requester)
+      const postUrl = coerce.recordUrl(post)
+      post = await db.posts.get(postUrl)
+      const gizmoURL = coerce.recordUrl(post.gizmoURL)
+      post.author = await this.getProfile(post._origin)
+      post.votes = await this.countVotes(postUrl)
+      post.gizmo = await this.getGizmo(requesterUrl, gizmoURL)
+      return post
     }
   }
 }
