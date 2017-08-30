@@ -411,6 +411,12 @@ exports.open = async function (userArchive) {
         }))
       }
 
+      if (opts.fetchReplies) {
+        promises = promises.concat(gizmos.map(async g => {
+          g.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(g._url))
+        }))
+      }
+
       if (opts.countVotes) {
         promises = promises.concat(gizmos.map(async g => {
           g.votes = await this.countVotes(g._url)
@@ -439,6 +445,7 @@ exports.open = async function (userArchive) {
       record.author = await this.getProfile(record._origin)
       record.votes = await this.countVotes(recordUrl)
       record.isSubscribed = await this.isSubscribed(requesterUrl, record)
+      record.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(recordUrl))
       return record
     },
 
@@ -558,6 +565,12 @@ exports.open = async function (userArchive) {
         }))
       }
 
+      if (opts.fetchReplies) {
+        promises = promises.concat(posts.map(async p => {
+          p.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(p._url))
+        }))
+      }
+
       await Promise.all(promises)
       return posts
     },
@@ -575,6 +588,7 @@ exports.open = async function (userArchive) {
       post.author = await this.getProfile(post._origin)
       post.votes = await this.countVotes(postUrl)
       post.gizmo = await this.getGizmo(requesterUrl, gizmoURL)
+      post.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(postUrl))
       return post
     }
   }
