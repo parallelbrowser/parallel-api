@@ -51,6 +51,8 @@ exports.open = async function (userArchive) {
         gizmoName: coerce.string(record.gizmoName),
         gizmoDescription: coerce.string(record.gizmoDescription),
         gizmoDocs: coerce.string(record.gizmoDocs),
+        gizmoDependencies: coerce.arrayOfDependencies(record.gizmoDependencies),
+        postDependencies: coerce.arrayOfDependencies(record.postDependencies),
         gizmoJS: coerce.string(record.gizmoJS),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
@@ -342,17 +344,29 @@ exports.open = async function (userArchive) {
       gizmoName,
       gizmoDescription,
       gizmoDocs,
+      gizmoDependencies,
+      postDependencies,
       gizmoJS
     }) {
       gizmoName = coerce.string(gizmoName)
       gizmoDescription = coerce.string(gizmoDescription)
       gizmoDocs = coerce.string(gizmoDocs)
+      gizmoDependencies = coerce.arrayOfDependencies(gizmoDependencies)
+      console.log('gizmo deps after coerce', gizmoDependencies)
+      gizmoDependencies = await Promise.all(gizmoDependencies.map(async d => await this.getGizmo(d.url)))
+      console.log('gizmo deps after promises', gizmoDependencies)
+      postDependencies = coerce.arrayOfDependencies(postDependencies)
+      console.log('post deps after coerce', postDependencies)
+      postDependencies = await Promise.all(postDependencies.map(async d => await this.getGizmo(d.url)))
+      console.log('post deps after promises', postDependencies)
       gizmoJS = coerce.string(gizmoJS)
       const createdAt = Date.now()
       return db.gizmos.add(archive, {
         gizmoName,
         gizmoDescription,
         gizmoDocs,
+        gizmoDependencies,
+        postDependencies,
         gizmoJS,
         createdAt
       })
@@ -429,6 +443,12 @@ exports.open = async function (userArchive) {
         }))
       }
 
+      if (opts.fetchGizmoDependencies) {
+        promises = promises.concat(gizmos.map(async g => {
+          g.fullDependencies = await this.getGizmoDependencies(g)
+        }))
+      }
+
       await Promise.all(promises)
       return gizmos
     },
@@ -438,15 +458,69 @@ exports.open = async function (userArchive) {
       return query.count()
     },
 
-    async getGizmo (requester, record) {
-      const requesterUrl = coerce.archiveUrl(requester)
-      const recordUrl = coerce.recordUrl(record)
-      record = await db.gizmos.get(recordUrl)
-      record.author = await this.getProfile(record._origin)
-      record.votes = await this.countVotes(recordUrl)
-      record.isSubscribed = await this.isSubscribed(requesterUrl, record)
-      record.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(recordUrl))
-      return record
+    async getGizmo (gizmo, opts = {}) {
+      console.log('gizmo in getGizmo', gizmo)
+      const gizmoURL = coerce.recordUrl(gizmo)
+      gizmo = await db.gizmos.get(gizmoURL)
+      if (opts.fetchAuthor) {
+        gizmo.author = await this.getProfile(gizmo._origin)
+      }
+      if (opts.countVotes) {
+        gizmo.votes = await this.countVotes(gizmoURL)
+      }
+      if (opts.fetchReplies) {
+        gizmo.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(gizmoURL))
+      }
+      if (opts.checkIfSubscribed) {
+        if (!opts.requester) {
+          throw new Error('The archive of the requester must be provided when checking if subscribed.')
+        } else {
+          const requesterURL = coerce.archiveUrl(opts.requester)
+          gizmo.isSubscribed = await this.isSubscribed(requesterURL, gizmo)
+        }
+      }
+      if (opts.fetchAllDependencies) {
+        gizmo = await this.getAllDependencies(gizmo)
+      }
+      return gizmo
+    },
+
+    async getDependency (gizmo) {
+      console.log('gizmo in getDependency', gizmo)
+      const gizmoURL = coerce.recordUrl(gizmo)
+      const dependency = await db.gizmos.get(gizmoURL)
+      console.log('dependency after getDependency', dependency)
+      return dependency
+    },
+
+    async getAllDependencies (gizmo) {
+      if (gizmo.gizmoDependencies.length === 0) {
+        return gizmo
+      }
+      let dependencies = await gizmo.gizmoDependencies.map(d => this.getDependency(d))
+      await Promise.all(dependencies)
+      let childDependencies = {}
+      await Promise.all(dependencies.map(async (d, idx) => {
+        childDependencies[idx] = await this.getAllDependencies(d)
+      }))
+      gizmo.childDependencies = childDependencies
+      return gizmo
+    },
+
+    async getPostDependencies (gizmo) {
+      console.log('gizmo in getPostDependencies', gizmo)
+      let postDependencies = []
+      postDependencies = await Promise.all(gizmo.postDependencies.map(async d => await this.getGizmo(d.url)))
+      console.log('postDependencies', postDependencies)
+      return postDependencies
+    },
+
+    async getGizmoDependencies (gizmo) {
+      console.log('gizmo in getGizmoDependencies', gizmo)
+      let fullDependencies = []
+      fullDependencies = await Promise.all(gizmo.gizmoDependencies.map(async d => await this.getGizmo(d.url)))
+      console.log('fullDependencies', fullDependencies)
+      return fullDependencies
     },
 
     async subscribe (archive, gizmo) {
@@ -554,7 +628,13 @@ exports.open = async function (userArchive) {
 
       if (opts.fetchGizmo) {
         promises = promises.concat(posts.map(async p => {
-          p.gizmo = await this.getGizmo(opts.requester, p.gizmoURL)
+          p.gizmo = await this.getGizmo(p.gizmoURL, {
+            fetchAuthor: true,
+            fetchReplies: true,
+            countVotes: true,
+            checkIfSubscribed: true,
+            requester: opts.requester
+          })
         }))
       }
 
@@ -572,6 +652,18 @@ exports.open = async function (userArchive) {
       }
 
       await Promise.all(promises)
+      console.log('posts after first promise.all in listPosts', posts)
+
+      promises = []
+      if (opts.fetchPostDependencies) {
+        promises = promises.concat(posts.map(async p => {
+          p.postDependencies = await this.getPostDependencies(p.gizmo)
+        }))
+      }
+
+      await Promise.all(promises)
+      console.log('posts after second promise.all in listPosts', posts)
+
       return posts
     },
 
@@ -587,7 +679,13 @@ exports.open = async function (userArchive) {
       const gizmoURL = coerce.recordUrl(post.gizmoURL)
       post.author = await this.getProfile(post._origin)
       post.votes = await this.countVotes(postUrl)
-      post.gizmo = await this.getGizmo(requesterUrl, gizmoURL)
+      post.gizmo = await this.getGizmo(gizmoURL, {
+        fetchAuthor: true,
+        fetchReplies: true,
+        countVotes: true,
+        checkIfSubscribed: true,
+        requester: requesterUrl
+      })
       post.replies = await this.listBroadcasts({fetchAuthor: true}, this.getRepliesQuery(postUrl))
       return post
     }
