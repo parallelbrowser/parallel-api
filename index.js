@@ -485,6 +485,8 @@ exports.open = async function (userArchive) {
       return gizmo
     },
 
+    // !! -- need to refactor -- !!
+
     async getDependency (gizmo) {
       console.log('gizmo in getDependency', gizmo)
       const gizmoURL = coerce.recordUrl(gizmo)
@@ -522,6 +524,8 @@ exports.open = async function (userArchive) {
       console.log('fullDependencies', fullDependencies)
       return fullDependencies
     },
+
+    // !! -- need to refactor -- !!
 
     async subscribe (archive, gizmo) {
       var archiveUrl = coerce.archiveUrl(archive)
