@@ -54,6 +54,7 @@ exports.open = async function (userArchive) {
         gizmoDependencies: coerce.arrayOfDependencies(record.gizmoDependencies),
         postDependencies: coerce.arrayOfDependencies(record.postDependencies),
         gizmoJS: coerce.string(record.gizmoJS),
+        postJS: coerce.string(record.postJS),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
@@ -63,7 +64,7 @@ exports.open = async function (userArchive) {
       primaryKey: 'createdAt',
       index: ['createdAt', '_origin+createdAt'],
       validator: record => ({
-        postJS: coerce.string(record.postJS),
+        postParams: coerce.string(record.postParams),
         postHTTP: coerce.string(record.postHTTP),
         postText: coerce.string(record.postText),
         gizmoURL: coerce.string(record.gizmoURL),
@@ -346,20 +347,18 @@ exports.open = async function (userArchive) {
       gizmoDocs,
       gizmoDependencies,
       postDependencies,
-      gizmoJS
+      gizmoJS,
+      postJS
     }) {
       gizmoName = coerce.string(gizmoName)
       gizmoDescription = coerce.string(gizmoDescription)
       gizmoDocs = coerce.string(gizmoDocs)
       gizmoDependencies = coerce.arrayOfDependencies(gizmoDependencies)
-      console.log('gizmo deps after coerce', gizmoDependencies)
       gizmoDependencies = await Promise.all(gizmoDependencies.map(async d => await this.getGizmo(d.url)))
-      console.log('gizmo deps after promises', gizmoDependencies)
       postDependencies = coerce.arrayOfDependencies(postDependencies)
-      console.log('post deps after coerce', postDependencies)
       postDependencies = await Promise.all(postDependencies.map(async d => await this.getGizmo(d.url)))
-      console.log('post deps after promises', postDependencies)
       gizmoJS = coerce.string(gizmoJS)
+      postJS = coerce.string(postJS)
       const createdAt = Date.now()
       return db.gizmos.add(archive, {
         gizmoName,
@@ -368,6 +367,7 @@ exports.open = async function (userArchive) {
         gizmoDependencies,
         postDependencies,
         gizmoJS,
+        postJS,
         createdAt
       })
     },
@@ -459,7 +459,6 @@ exports.open = async function (userArchive) {
     },
 
     async getGizmo (gizmo, opts = {}) {
-      console.log('gizmo in getGizmo', gizmo)
       const gizmoURL = coerce.recordUrl(gizmo)
       gizmo = await db.gizmos.get(gizmoURL)
       if (opts.fetchAuthor) {
@@ -488,10 +487,8 @@ exports.open = async function (userArchive) {
     // !! -- need to refactor -- !!
 
     async getDependency (gizmo) {
-      console.log('gizmo in getDependency', gizmo)
       const gizmoURL = coerce.recordUrl(gizmo)
       const dependency = await db.gizmos.get(gizmoURL)
-      console.log('dependency after getDependency', dependency)
       return dependency
     },
 
@@ -510,18 +507,14 @@ exports.open = async function (userArchive) {
     },
 
     async getPostDependencies (gizmo) {
-      console.log('gizmo in getPostDependencies', gizmo)
       let postDependencies = []
       postDependencies = await Promise.all(gizmo.postDependencies.map(async d => await this.getGizmo(d.url)))
-      console.log('postDependencies', postDependencies)
       return postDependencies
     },
 
     async getGizmoDependencies (gizmo) {
-      console.log('gizmo in getGizmoDependencies', gizmo)
       let fullDependencies = []
       fullDependencies = await Promise.all(gizmo.gizmoDependencies.map(async d => await this.getGizmo(d.url)))
-      console.log('fullDependencies', fullDependencies)
       return fullDependencies
     },
 
@@ -568,19 +561,19 @@ exports.open = async function (userArchive) {
     // TCW -- posts api
 
     post (archive, {
-      postJS,
+      postParams,
       postHTTP,
       postText,
       gizmoURL
     }) {
-      postJS = coerce.string(postJS)
+      postParams = coerce.string(postParams)
       postHTTP = coerce.string(postHTTP)
       postText = coerce.string(postText)
       gizmoURL = coerce.string(gizmoURL)
       const createdAt = Date.now()
 
       return db.posts.add(archive, {
-        postJS,
+        postParams,
         postHTTP,
         postText,
         gizmoURL,
@@ -656,7 +649,6 @@ exports.open = async function (userArchive) {
       }
 
       await Promise.all(promises)
-      console.log('posts after first promise.all in listPosts', posts)
 
       promises = []
       if (opts.fetchPostDependencies) {
@@ -666,7 +658,6 @@ exports.open = async function (userArchive) {
       }
 
       await Promise.all(promises)
-      console.log('posts after second promise.all in listPosts', posts)
 
       return posts
     },

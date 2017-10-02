@@ -1,6 +1,6 @@
 {
   "name": "parallel-scratch-api",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Scratch API for Parallel.",
   "main": "index.js",
   "dependencies": {
