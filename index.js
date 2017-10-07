@@ -1,4 +1,4 @@
-const InjestDB = require('scratch-db-test')
+const InjestDB = require('ingestdb')
 const coerce = require('./lib/coerce')
 
 // exported api
