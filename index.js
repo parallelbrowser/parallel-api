@@ -537,6 +537,7 @@ exports.open = async function (userArchive) {
       if (changes === 0) {
         throw new Error('Failed to subscribe: gizmo record already exists.')
       }
+      return true
     },
 
     async unsubscribe (archive, gizmo) {

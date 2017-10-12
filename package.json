@@ -1,7 +1,7 @@
 {
-  "name": "parallel-scratch-api",
+  "name": "parallel-api",
   "version": "0.9.6",
-  "description": "Scratch API for Parallel.",
+  "description": "API for Parallel.",
   "main": "index.js",
   "dependencies": {
     "ingestdb": "^2.4.7",
