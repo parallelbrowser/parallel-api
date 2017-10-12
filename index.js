@@ -537,7 +537,27 @@ exports.open = async function (userArchive) {
       if (changes === 0) {
         throw new Error('Failed to subscribe: gizmo record already exists.')
       }
-      return true
+    },
+
+    async subscribeMany (archive, gizmoArray) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.subgizmos = record.subgizmos || []
+        gizmoArray.forEach(gizmo => {
+          if (!record.subgizmos.find(sg => sg.url === gizmo._url)) {
+            record.subgizmos.push({
+              url: gizmo._url,
+              origin: gizmo._origin,
+              author: gizmo.author.name,
+              name: gizmo.gizmoName
+            })
+          }
+        })
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to subscribe: gizmo record already exists.')
+      }
     },
 
     async unsubscribe (archive, gizmo) {
