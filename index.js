@@ -127,11 +127,6 @@ exports.open = async function (userArchive) {
     async setProfile (archive, profile) {
       var archiveUrl = coerce.archiveUrl(archive)
       await db.profile.upsert(archiveUrl, profile)
-      if ('name' in profile) {
-        let title = coerce.string(profile.name) || 'anonymous'
-        archive = db._archives[archiveUrl]
-        await archive.configure({title: `User: ${title}`})
-      }
     },
 
     async setAvatar (archive, imgData, extension) {
