@@ -81,7 +81,9 @@ exports.open = async function (userArchive) {
 
     // index the followers
     db.profile.get(userArchive).then(async profile => {
-      profile.followUrls.forEach(url => db.addArchive(url))
+      if (profile) {
+        profile.followUrls.forEach(url => db.addArchive(url))
+      }
     })
   }
 
@@ -122,9 +124,14 @@ exports.open = async function (userArchive) {
       return db.profile.get(archiveUrl)
     },
 
-    setProfile (archive, profile) {
+    async setProfile (archive, profile) {
       var archiveUrl = coerce.archiveUrl(archive)
-      return db.profile.upsert(archiveUrl, profile)
+      await db.profile.upsert(archiveUrl, profile)
+      if ('name' in profile) {
+        let title = coerce.string(profile.name) || 'anonymous'
+        archive = db._archives[archiveUrl]
+        await archive.configure({title: `User: ${title}`})
+      }
     },
 
     async setAvatar (archive, imgData, extension) {
