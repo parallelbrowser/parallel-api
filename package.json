@@ -4,9 +4,7 @@
   "description": "API for Parallel.",
   "main": "index.js",
   "dependencies": {
-    "ingestdb": "^2.4.7",
-    "scratch-db-test": "^0.0.8",
-    "scratch-gest": "0.0.1"
+    "parallel-ingest": "git://github.com/parallelbrowser/parallel-ingest.git"
   },
   "devDependencies": {
     "ava": "^0.21.0",

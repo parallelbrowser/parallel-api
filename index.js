@@ -54,7 +54,9 @@ exports.open = async function (userArchive) {
         gizmoDependencies: coerce.arrayOfDependencies(record.gizmoDependencies),
         postDependencies: coerce.arrayOfDependencies(record.postDependencies),
         gizmoJS: coerce.string(record.gizmoJS),
+        gizmoCSS: coerce.string(record.gizmoCSS),
         postJS: coerce.string(record.postJS),
+        postCSS: coerce.string(record.postCSS),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
@@ -350,7 +352,9 @@ exports.open = async function (userArchive) {
       gizmoDependencies,
       postDependencies,
       gizmoJS,
-      postJS
+      gizmoCSS,
+      postJS,
+      postCSS
     }) {
       gizmoName = coerce.string(gizmoName)
       gizmoDescription = coerce.string(gizmoDescription)
@@ -360,7 +364,9 @@ exports.open = async function (userArchive) {
       postDependencies = coerce.arrayOfDependencies(postDependencies)
       postDependencies = await Promise.all(postDependencies.map(async d => await this.getGizmo(d.url)))
       gizmoJS = coerce.string(gizmoJS)
+      gizmoCSS = coerce.string(gizmoCSS)
       postJS = coerce.string(postJS)
+      postCSS = coerce.string(postCSS)
       const createdAt = Date.now()
       return db.gizmos.add(archive, {
         gizmoName,
@@ -369,7 +375,9 @@ exports.open = async function (userArchive) {
         gizmoDependencies,
         postDependencies,
         gizmoJS,
+        gizmoCSS,
         postJS,
+        postCSS,
         createdAt
       })
     },
