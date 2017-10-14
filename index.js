@@ -1,4 +1,4 @@
-const InjestDB = require('ingestdb')
+const InjestDB = require('parallel-ingest')
 const coerce = require('./lib/coerce')
 
 // exported api

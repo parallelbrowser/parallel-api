@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/parallelbrowser/dat-scratch-api.git"
+    "url": "git+https://github.com/parallelbrowser/parallel-api.git"
   },
   "keywords": [
     "dat",
@@ -26,7 +26,7 @@
   "author": "Tom Willkens <tom.willkens@protonmail.com",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/parallelbrowser/dat-scratch-api/issues"
+    "url": "https://github.com/parallelbrowser/parallel-api/issues"
   },
-  "homepage": "https://github.com/parallelbrowser/dat-scratch-api#readme"
+  "homepage": "https://github.com/parallelbrowser/parallel-api#readme"
 }
