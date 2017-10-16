@@ -149,11 +149,12 @@ exports.open = async function (userArchive) {
       var archives = []
       var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
         record.follows = record.follows || []
+        console.log('record.follows', record.follows)
         followArray.forEach(follow => {
           console.log('follow', follow)
-          if (!record.follows.find(f => f.url === follow._url)) {
+          if (!record.follows.find(f => f.url === follow.url)) {
             record.follows.push({
-              url: follow._url,
+              url: follow.url,
               name: follow.name
             })
             archives.push(coerce.archiveUrl(follow))
@@ -162,7 +163,7 @@ exports.open = async function (userArchive) {
         return record
       })
       if (changes === 0) {
-        throw new Error('Failed to subscribe: gizmo record already exists.')
+        console.log('No changes')
       }
       console.log('archives', archives)
       await db.addArchives(archives)
