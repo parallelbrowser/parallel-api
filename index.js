@@ -491,6 +491,7 @@ exports.open = async function (userArchive) {
     },
 
     async getGizmo (gizmo, opts = {}) {
+      console.log('gizmo in getGizmo', gizmo)
       const gizmoURL = coerce.recordUrl(gizmo)
       gizmo = await db.gizmos.get(gizmoURL)
       if (opts.fetchAuthor) {
@@ -658,7 +659,7 @@ exports.open = async function (userArchive) {
       var promises = []
       query = query || this.getPostsQuery(opts)
       var posts = await query.toArray()
-
+      console.log('posts in listPosts', posts)
       if (opts.currentURL) {
         posts = posts.filter(p => {
           return p.postHTTP === opts.currentURL
@@ -675,6 +676,8 @@ exports.open = async function (userArchive) {
           p.author = await profiles[p._origin]
         }))
       }
+
+      console.log('posts after fetchAuthor', posts)
 
       if (opts.fetchGizmo) {
         promises = promises.concat(posts.map(async p => {
