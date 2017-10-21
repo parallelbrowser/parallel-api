@@ -494,6 +494,7 @@ exports.open = async function (userArchive) {
       console.log('gizmo in getGizmo', gizmo)
       const gizmoURL = coerce.recordUrl(gizmo)
       gizmo = await db.gizmos.get(gizmoURL)
+      console.log('gizmo after db.gizmos.get', gizmo)
       if (opts.fetchAuthor) {
         gizmo.author = await this.getProfile(gizmo._origin)
       }
