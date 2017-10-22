@@ -1,4 +1,4 @@
-const InjestDB = require('scratch-db-test')
+const InjestDB = require('parallel-ingest')
 const coerce = require('./lib/coerce')
 
 // exported api
@@ -54,7 +54,9 @@ exports.open = async function (userArchive) {
         gizmoDependencies: coerce.arrayOfDependencies(record.gizmoDependencies),
         postDependencies: coerce.arrayOfDependencies(record.postDependencies),
         gizmoJS: coerce.string(record.gizmoJS),
+        gizmoCSS: coerce.string(record.gizmoCSS),
         postJS: coerce.string(record.postJS),
+        postCSS: coerce.string(record.postCSS),
         createdAt: coerce.number(record.createdAt, {required: true}),
         receivedAt: Date.now()
       })
@@ -81,7 +83,9 @@ exports.open = async function (userArchive) {
 
     // index the followers
     db.profile.get(userArchive).then(async profile => {
-      profile.followUrls.forEach(url => db.addArchive(url))
+      if (profile) {
+        profile.followUrls.forEach(url => db.addArchive(url))
+      }
     })
   }
 
@@ -122,9 +126,9 @@ exports.open = async function (userArchive) {
       return db.profile.get(archiveUrl)
     },
 
-    setProfile (archive, profile) {
+    async setProfile (archive, profile) {
       var archiveUrl = coerce.archiveUrl(archive)
-      return db.profile.upsert(archiveUrl, profile)
+      await db.profile.upsert(archiveUrl, profile)
     },
 
     async setAvatar (archive, imgData, extension) {
@@ -136,6 +140,28 @@ exports.open = async function (userArchive) {
         await archive.commit()
       }
       return db.profile.upsert(archive, {avatar: filename})
+    },
+
+    async followMany (archive, followArray) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      var archives = []
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.follows = record.follows || []
+        followArray.forEach(follow => {
+          if (!record.follows.find(f => f.url === follow.url)) {
+            record.follows.push({
+              url: follow.url,
+              name: follow.name
+            })
+            archives.push(coerce.archiveUrl(follow))
+          }
+        })
+        return record
+      })
+      if (changes === 0) {
+        console.log('No changes')
+      }
+      await db.addArchives(archives)
     },
 
     async follow (archive, target, name) {
@@ -348,7 +374,9 @@ exports.open = async function (userArchive) {
       gizmoDependencies,
       postDependencies,
       gizmoJS,
-      postJS
+      gizmoCSS,
+      postJS,
+      postCSS
     }) {
       gizmoName = coerce.string(gizmoName)
       gizmoDescription = coerce.string(gizmoDescription)
@@ -358,7 +386,9 @@ exports.open = async function (userArchive) {
       postDependencies = coerce.arrayOfDependencies(postDependencies)
       postDependencies = await Promise.all(postDependencies.map(async d => await this.getGizmo(d.url)))
       gizmoJS = coerce.string(gizmoJS)
+      gizmoCSS = coerce.string(gizmoCSS)
       postJS = coerce.string(postJS)
+      postCSS = coerce.string(postCSS)
       const createdAt = Date.now()
       return db.gizmos.add(archive, {
         gizmoName,
@@ -367,7 +397,9 @@ exports.open = async function (userArchive) {
         gizmoDependencies,
         postDependencies,
         gizmoJS,
+        gizmoCSS,
         postJS,
+        postCSS,
         createdAt
       })
     },
@@ -532,6 +564,27 @@ exports.open = async function (userArchive) {
             name: gizmo.gizmoName
           })
         }
+        return record
+      })
+      if (changes === 0) {
+        throw new Error('Failed to subscribe: gizmo record already exists.')
+      }
+    },
+
+    async subscribeMany (archive, gizmoArray) {
+      var archiveUrl = coerce.archiveUrl(archive)
+      var changes = await db.profile.where('_origin').equals(archiveUrl).update(record => {
+        record.subgizmos = record.subgizmos || []
+        gizmoArray.forEach(gizmo => {
+          if (!record.subgizmos.find(sg => sg.url === gizmo._url)) {
+            record.subgizmos.push({
+              url: gizmo._url,
+              origin: gizmo._origin,
+              author: gizmo.author.name,
+              name: gizmo.gizmoName
+            })
+          }
+        })
         return record
       })
       if (changes === 0) {
